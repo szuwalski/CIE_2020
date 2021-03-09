@@ -1,0 +1,404 @@
+---
+author: "Cody Szuwalski"
+date: "July 2020"
+output:
+  pdf_document:
+    fig_caption: yes
+    fig_height: 4
+    fig_width: 6
+header-includes:   
+-  \pagenumbering{gobble}
+number_sections: yes
+csl: fish-and-fisheries.csl
+toc: yes
+title: "Snow crab simulations: effects of bycatch in the groundfish fisheries"
+---
+
+```{r, include=FALSE}
+
+knitr::opts_chunk$set(echo=FALSE,message=FALSE,warning=FALSE)
+
+library(plyr)
+library(dplyr)
+library(knitr)
+library(ggplot2)
+library(PBSmodelling)
+library(pander)
+library(coda)
+library(maps)
+library(lattice)
+library(PBSmapping)
+library(mapdata)    #some additional hires data
+library(maptools)   #useful tools such as reading shapefiles
+library(mapproj)
+library(plotrix)
+library(tinytex)
+
+in_path<-"C:/gmacs/gmr/R/"
+#library(miceadds)
+library(ggridges)
+library(reshape2)
+#source.all( path=in_path, grepstring="\\.R",  print.source=TRUE, file_sep="__"  )
+
+
+```
+
+\newpage
+
+
+```{r,echo=F,message=FALSE,warning=F,include=FALSE}
+
+survey_fig_N<-7
+ABC_buffer  <-0.8
+
+chosen_model<-"opilio"
+chosen_ind<-1
+
+#===============
+# directory in which all of the scenario folder reside and names of the scenario folders
+Scenarios   <-c("18_sq_model"，"19_sq_model","20_sq_model")
+ScenarioNames<-c("2018 data","2019 data","2020 data")
+
+#==make a list of the scenario names
+##==save all of the output from the scenarios
+snowad.rep<-rep(list(list()),length(Scenarios))
+CatchYrN<-rep(list(list()),length(Scenarios))
+SurvYrN<-rep(list(list()),length(Scenarios))
+DiscYrFN<-rep(list(list()),length(Scenarios))
+DiscYrMN<-rep(list(list()),length(Scenarios))
+TrawlYrN<-rep(list(list()),length(Scenarios))
+ObsCatchNumbers<-rep(list(list()),length(Scenarios))
+ObsCatchPounds<-rep(list(list()),length(Scenarios))
+RetCatchYrs<-rep(list(list()),length(Scenarios))
+TotCatchYrs<-rep(list(list()),length(Scenarios))
+ObsDiscF<-rep(list(list()),length(Scenarios))
+ObsDiscM<-rep(list(list()),length(Scenarios))
+TrawlBycatch<-rep(list(list()),length(Scenarios))
+SurveyNumbers<-rep(list(list()),length(Scenarios))
+SurveyYrs<-rep(list(list()),length(Scenarios))
+LengthBins<-rep(list(list()),length(Scenarios))
+GrowthNfem<-rep(list(list()),length(Scenarios))
+GrowthNm<-rep(list(list()),length(Scenarios))
+GrowthData<-rep(list(list()),length(Scenarios))
+
+REPfileEnd<-rep(list(list()),length(Scenarios))
+MgmtQuants<-rep(list(list()),length(Scenarios))
+
+# names(snowad.rep[[ChosenInd]])
+# snowad.rep[[ChosenInd]]$"Predicted probability of maturing female" 
+# snowad.rep[[ChosenInd]]$"Predicted probability of maturing male" 
+
+for(x in 1:length(Scenarios))
+{
+  snowad.rep[[x]]  <-readList(paste(Scenarios[x],"/R_input.txt",sep=""))
+
+DATfile <-readLines(paste(Scenarios[x],"/2016sc.DAT",sep=""))
+
+# length of data types
+tmp<-grep("number of years of retained fishery data",DATfile)
+CatchYrN[[x]] <-as.numeric(DATfile[tmp+1])
+tmp<-grep("number of years of survey data",DATfile)
+SurvYrN[[x]] <-as.numeric(DATfile[tmp+1])
+tmp<-grep("number of years of fishery discard",DATfile)
+DiscYrFN[[x]] <-as.numeric(DATfile[tmp+1])
+tmp<-grep("number of years of fishery male discard",DATfile)
+DiscYrMN[[x]] <-as.numeric(DATfile[tmp+1])
+tmp<-grep("number of years of trawl discard",DATfile)
+TrawlYrN[[x]] <-as.numeric(DATfile[tmp+1])
+
+# observed retained catch
+tmp<-grep("retained catch in numbers",DATfile)
+ObsCatchNumbers[[x]]<-as.numeric(DATfile[(tmp+1):(tmp+CatchYrN[[x]])])[1:CatchYrN[[x]]]
+tmp<-grep("retained catch in pounds",DATfile)
+ObsCatchPounds[[x]]<-as.numeric(DATfile[(tmp+1):(tmp+CatchYrN[[x]])])[1:CatchYrN[[x]]]
+tmp<-grep("years for fishery data",DATfile)
+RetCatchYrs[[x]]<-as.numeric(unlist(strsplit(DATfile[(tmp+1)],split=" ")))
+RetCatchYrs[[x]]<-RetCatchYrs[[x]][!is.na(RetCatchYrs[[x]])]
+
+tmp<-grep("years when have fishery discard length data",DATfile)
+TotCatchYrs[[x]]<-as.numeric(unlist(strsplit(DATfile[(tmp+1)],split=" ")))
+TotCatchYrs[[x]]<-TotCatchYrs[[x]][!is.na(TotCatchYrs[[x]])]
+
+# observed discard
+tmp<-grep("Discard Catch from observer",DATfile)
+ObsDiscF[[x]]<-as.numeric(DATfile[(tmp+2):(tmp+1+CatchYrN[[x]])])[1:CatchYrN[[x]]]
+tmp<-grep("discard catch males",DATfile)
+ObsDiscM[[x]]<-as.numeric(DATfile[(tmp+1):(tmp+CatchYrN[[x]])])[1:CatchYrN[[x]]]
+
+# observed trawl
+tmp<-grep(" bycatch numbers by geartype",DATfile)
+TrawlBycatch[[x]]<-as.numeric(DATfile[(tmp+2):(tmp+1+CatchYrN[[x]])])[1:CatchYrN[[x]]]
+
+# survey numbers
+tmp<-grep("survey numbers by year",DATfile)
+SurveyNumbers[[x]]<-as.numeric(DATfile[(tmp+1):(tmp+SurvYrN[[x]])])
+tmp<-grep("years for survey data",DATfile)
+SurveyYrs[[x]]<-na.omit(as.numeric(unlist(strsplit(DATfile[(tmp+1)],split=" "))))
+
+tmp<-grep("length bins",DATfile)[[5]]
+LengthBins[[x]]<-as.numeric(unlist(strsplit(DATfile[(tmp+1)],split=" ")))
+LengthBins[[x]]<-LengthBins[[x]][!is.na(LengthBins[[x]])]
+
+tmp       <-grep("growth data female",DATfile)
+GrowthNfem[[x]]<-as.numeric(DATfile[(tmp+1)])
+tmp1      <-grep("growth data male",DATfile)
+GrowthNm[[x]]  <-as.numeric(DATfile[(tmp1+1)])
+GrowthData[[x]]<-matrix(NA,ncol=4,nrow=max(GrowthNm[[x]],GrowthNfem[[x]]))
+
+GrowthData[[x]][1:GrowthNfem[[x]],1] <-na.omit(as.numeric(unlist(strsplit(DATfile[(tmp+2)],split="\t"))))
+GrowthData[[x]][1:GrowthNfem[[x]],2] <-na.omit(as.numeric(unlist(strsplit(DATfile[(tmp+3)],split="\t"))))
+
+GrowthData[[x]][1:GrowthNm[[x]],3]  <-na.omit(as.numeric(unlist(strsplit(DATfile[(tmp1+2)],split="\t"))))
+GrowthData[[x]][1:GrowthNm[[x]],4] <-na.omit(as.numeric(unlist(strsplit(DATfile[(tmp1+3)],split="\t"))))
+
+#==pulling MLEs for management quantities
+for(x in 1:length(Scenarios))
+{
+  REPfileEnd[[x]]       <-readLines(paste(Scenarios[x],"/2016sc.REP",sep=""))
+  MgmtQuants[[x]]       <-as.numeric(unlist(strsplit(as.character(REPfileEnd[[x]][1]),split=" ")))
+  MgmtQuants[[x]]$Status<-as.numeric(MgmtQuants[[x]][5])/as.numeric(MgmtQuants[[x]][2])
+  names(MgmtQuants[[x]])<-c("F","BMSY","Surv_MMB","Fish_MMB","Mate_MMB","F35","FOFL","OFL","Status")
+  }
+}
+
+TakeDir     <-"C:/SnowCrab2020/"
+
+ 
+#==MLE stuff
+#==set up storage
+  mle_B35<-list()
+  mle_F35<-list()
+  mle_FOFL<-list()
+  mle_OFL<-list()
+  mle_MMB<-list()
+  mle_projMMB<-list()
+  mle_ABC<-list()
+  mle_Status<-list()
+  mle_Status2<-list()
+  mle_allMMB<-list()
+
+  #==CHECK THIS  
+for(x in 1:length(Scenarios))
+{  
+ REPfile <-readLines(paste(TakeDir,Scenarios[x],"/2016sc.REP",sep=""))
+ temp <-as.numeric(unlist(strsplit(REPfile[1],split=" ")))
+ temp <-temp[!is.na(temp)]
+ mle_B35[[x]] <-temp[2]
+ mle_F35[[x]] <-temp[6]
+ mle_FOFL[[x]]<-temp[7]
+ mle_OFL[[x]] <-temp[8]
+ mle_MMB[[x]] <-temp[5]    
+ mle_ABC[[x]]<-mle_OFL[[x]]*ABC_buffer
+ mle_Status[[x]]<-mle_MMB[[x]]/mle_B35[[x]]
+
+ mle_projMMB[[x]]<-snowad.rep[[x]]$"Mature male biomass at mating"[SurvYrN[[x]]]
+ mle_allMMB[[x]]<-snowad.rep[[x]]$"Mature male biomass at mating"
+ mle_Status2[[x]]<-mle_projMMB[[x]]/ mle_B35[[x]]
+   
+}
+  
+ B35<-mle_B35
+ F35<-mle_F35
+ FOFL<-mle_FOFL
+ OFL<-mle_OFL
+ MMB<-mle_MMB    
+ ABC<-mle_ABC
+ Status<-mle_Status 
+ projMMB<-mle_projMMB
+ proj_Status<-mle_Status2
+
+```
+
+\newpage
+# Introduction
+
+
+# Methods
+
+
+# Results
+
+
+# Discussion
+
+
+
+\newpage
+
+```{r,echo=FALSE,warning=FALSE,message=F,fig.width=8.5,fig.height=6,fig.cap="\\label{mmbfits}Model fits to the observed mature biomass at survey"}
+
+
+##=======FITS TO THE DATA SOURCES=========================
+#==mature male biomass==============
+par(mar=c(.1,.1,.3,.1),oma=c(4,4,1,1))
+
+plot(as.numeric(unlist(snowad.rep[[2]]$"Observed survey male spawning biomass"))[1:SurvYrN[[2]]]~na.omit(SurveyYrs[[2]]),
+     pch=20,ylab="Mature Male Biomass (1000 t)",
+     xlab="Year",las=1,ylim=c(0,600),
+     xlim=c(1982,2025));
+
+for(j in 1:length(SurveyYrs[[2]]))
+{
+ segments(x0=SurveyYrs[[2]][j],x1=na.omit(SurveyYrs[[2]])[j],
+		y0=as.numeric(unlist(snowad.rep[[2]]$"Observed survey male spawning biomass"))[j]  /   exp(1.96*sqrt(log(1+snowad.rep[[2]]$"survey CV"[2,]^2)))[j],
+		y1=as.numeric(unlist(snowad.rep[[2]]$"Observed survey male spawning biomass"))[j] * exp(1.96*sqrt(log(1+snowad.rep[[2]]$"survey CV"[2,]^2)))[j])
+}
+
+for(x in 1:length(Scenarios))
+  lines(as.numeric(unlist(snowad.rep[[x]]$"Predicted Male survey mature Biomass"))[1:SurvYrN[[x]]]~na.omit(SurveyYrs[[x]]),type="l",lty=x,lwd=1)
+legend("topleft",bty='n',"Males")
+
+for(x in 1:length(Scenarios))
+{
+st_ind<-SurveyYrs[[x]][length(SurveyYrs[[x]])]
+lines(as.numeric(unlist(snowad.rep[[x]]$"Predicted Male survey mature Biomass"))[SurvYrN[[x]]:(5+SurvYrN[[x]])]~seq(st_ind,st_ind+5),type="l",lty=x,lwd=1,col=x+1)
+}
+
+legend("topright",bty='n',lty=seq(1,length(Scenarios)),legend=ScenarioNames,col=c(2,3,4))
+
+#==show projectiosn from two different data
+#==calc residual
+p<-1
+obs<-as.numeric(unlist(snowad.rep[[p]]$"Observed survey male spawning biomass"))[1:SurvYrN[[p]]]
+preds<-as.numeric(unlist(snowad.rep[[p]]$"Predicted Male survey mature Biomass"))[1:SurvYrN[[p]]]
+
+work_resid<-(obs-preds)/preds
+#hist(work_resid)
+mult_p<-quantile(work_resid,prob=c(.25,.75))
+
+j<-length(SurveyYrs[[p]])+2
+adj_ov<-0.2
+
+ segments(x0=SurveyYrs[[p]][length(SurveyYrs[[p]])]+2+adj_ov,x1=SurveyYrs[[p]][length(SurveyYrs[[p]])]+2+adj_ov,
+		y0=as.numeric(unlist(snowad.rep[[p]]$"Predicted Male survey mature Biomass"))[j] + mult_p[1]*as.numeric(unlist(snowad.rep[[p]]$"Predicted Male survey mature Biomass"))[j],
+		y1=as.numeric(unlist(snowad.rep[[p]]$"Predicted Male survey mature Biomass"))[j] + mult_p[2]*as.numeric(unlist(snowad.rep[[p]]$"Predicted Male survey mature Biomass"))[j],col=2)
+
+points(x=SurveyYrs[[p]][length(SurveyYrs[[p]])]+2+adj_ov,y=as.numeric(unlist(snowad.rep[[p]]$"Predicted Male survey mature Biomass"))[j],col=2,pch=16)
+
+
+#==calc residuals
+obs<-as.numeric(unlist(snowad.rep[[2]]$"Observed survey male spawning biomass"))[1:SurvYrN[[2]]]
+preds<-as.numeric(unlist(snowad.rep[[2]]$"Predicted Male survey mature Biomass"))[1:SurvYrN[[2]]]
+
+work_resid<-(obs-preds)/preds
+#hist(work_resid)
+mult_p<-quantile(work_resid,prob=c(.25,.75))
+
+j<-length(SurveyYrs[[2]])+1
+
+ segments(x0=SurveyYrs[[2]][length(SurveyYrs[[2]])]+1,x1=SurveyYrs[[2]][length(SurveyYrs[[2]])]+1,
+		y0=as.numeric(unlist(snowad.rep[[2]]$"Predicted Male survey mature Biomass"))[j] + mult_p[1]*as.numeric(unlist(snowad.rep[[2]]$"Predicted Male survey mature Biomass"))[j],
+		y1=as.numeric(unlist(snowad.rep[[2]]$"Predicted Male survey mature Biomass"))[j] + mult_p[2]*as.numeric(unlist(snowad.rep[[2]]$"Predicted Male survey mature Biomass"))[j],col=3)
+
+points(x=SurveyYrs[[2]][length(SurveyYrs[[2]])]+1,y=as.numeric(unlist(snowad.rep[[2]]$"Predicted Male survey mature Biomass"))[j],col=3,pch=16)
+
+
+#==calc residual
+p<-3
+obs<-as.numeric(unlist(snowad.rep[[p]]$"Observed survey male spawning biomass"))[1:SurvYrN[[p]]]
+preds<-as.numeric(unlist(snowad.rep[[p]]$"Predicted Male survey mature Biomass"))[1:SurvYrN[[p]]]
+
+work_resid<-(obs-preds)/preds
+#hist(work_resid)
+mult_p<-quantile(work_resid,prob=c(.25,.75))
+
+j<-length(SurveyYrs[[p]])+1
+adj_ov<-0.4
+
+ segments(x0=SurveyYrs[[p]][length(SurveyYrs[[p]])]+1+adj_ov,x1=SurveyYrs[[p]][length(SurveyYrs[[p]])]+1+adj_ov,
+		y0=as.numeric(unlist(snowad.rep[[p]]$"Predicted Male survey mature Biomass"))[j] + mult_p[1]*as.numeric(unlist(snowad.rep[[p]]$"Predicted Male survey mature Biomass"))[j],
+		y1=as.numeric(unlist(snowad.rep[[p]]$"Predicted Male survey mature Biomass"))[j] + mult_p[2]*as.numeric(unlist(snowad.rep[[p]]$"Predicted Male survey mature Biomass"))[j],col=4)
+
+points(x=SurveyYrs[[p]][length(SurveyYrs[[p]])]+1+adj_ov,y=as.numeric(unlist(snowad.rep[[p]]$"Predicted Male survey mature Biomass"))[j],col=4,pch=16)
+
+
+
+```
+
+\newpage
+
+
+
+```{r,echo=FALSE,warning=FALSE,message=F,fig.width=8,fig.height=9,fig.cap="\\label{predfmort}Model predicted fishing mortalities and selectivities for all sources of mortality"}
+## estimated quanties
+# fishing mortality and fishery selectivities
+par(mfrow=c(3,2),mar=c(.1,.1,.3,.1),oma=c(4,5,2,4))
+plot(snowad.rep[[1]]$"estimated annual total fishing mortality"~RetCatchYrs[[1]], type="l",las=1,xaxt='n',xlim=c(min(unlist(RetCatchYrs)),max(unlist(RetCatchYrs))),ylim=c(0,4))
+for(x in 2:length(Scenarios))
+  lines(snowad.rep[[x]]$"estimated annual total fishing mortality"~RetCatchYrs[[x]],lty=x)
+legend("topright",bty='n',"Directed")
+
+# for(x in 2:length(Scenarios))
+#   print(snowad.rep[[x]]$"estimated annual total fishing mortality")
+
+
+plot(snowad.rep[[1]]$"selectivity fishery retained old male"[1,]~LengthBins[[1]],type='l',yaxt='n',xaxt='n')
+for(x in 2:length(Scenarios))
+  lines(snowad.rep[[x]]$"selectivity fishery retained old male"[1,]~LengthBins[[x]],lty=x)
+axis(side=4,las=1)
+for(x in 1:length(Scenarios))
+  {
+   lines(snowad.rep[[x]]$ "selectivity fishery total new male"[1,]~LengthBins[[x]],lty=x,col=2) 
+   }
+legend("topleft",col=c(2,1),bty='n',c("Total","Retained")) ## CHANGE THIS
+
+plot(snowad.rep[[1]]$"estimated annual fishing mortality trawl bycatch"~RetCatchYrs[[1]],type="l",las=1,xaxt='n',xlim=c(min(unlist(RetCatchYrs)),max(unlist(RetCatchYrs))))
+legend("topright",bty='n',"Trawl")
+for(x in 2:length(Scenarios))
+  lines(snowad.rep[[x]]$"estimated annual fishing mortality trawl bycatch"~RetCatchYrs[[x]],lty=x)
+plot(snowad.rep[[1]]$"selectivity trawl female"~LengthBins[[1]],type='l',yaxt='n',xaxt='n')
+for(x in 2:length(Scenarios))
+  lines(snowad.rep[[x]]$"selectivity trawl female"~LengthBins[[x]],lty=x)
+axis(side=4,las=1)
+legend("topleft",bty='n',lty=seq(1,length(Scenarios)),legend=ScenarioNames)
+
+plot(snowad.rep[[1]]$"estimated annual fishing mortality females pot"~RetCatchYrs[[1]], type="l",las=1,xlim=c(min(unlist(RetCatchYrs)),max(unlist(RetCatchYrs))))
+for(x in 2:length(Scenarios))
+  lines(snowad.rep[[x]]$"estimated annual fishing mortality females pot"~RetCatchYrs[[x]],lty=x)
+legend("topleft",bty='n',"Female discard")
+plot(snowad.rep[[1]]$"selectivity discard female"[1,]~LengthBins[[1]],type='l',yaxt='n')
+for(x in 2:length(Scenarios))
+  lines(snowad.rep[[x]]$"selectivity discard female"[1,]~LengthBins[[x]],lty=x)
+axis(side=4,las=1)
+
+mtext(side=2,outer=T,expression(y^-1),line=3.25)
+mtext(side=4,outer=T,"Probability",line=2.5)
+mtext(side=3,outer=T,"Estimated fishing mortality",adj=.1)
+mtext(side=3,outer=T,"Selectivity",adj=.8)
+mtext(side=1,outer=T,"Year",adj=.2,line=2)
+mtext(side=1,outer=T,"Length (mm)",adj=.8,line=2)
+
+```
+
+\newpage
+
+```{r,echo=FALSE,warning=FALSE,message=F}
+
+
+PlotTab<- data.frame(Model=ScenarioNames,
+                     MMB=rep(0,length(Scenarios)),
+                     B35=rep(0,length(Scenarios)),
+                     F35=rep(0,length(Scenarios)),
+                     FOFL=rep(0,length(Scenarios)),
+                     OFL=rep(0,length(Scenarios)), 
+                     Status=rep(0,length(Scenarios)))
+                     
+for(x in 1:length(MgmtQuants))
+  {
+   PlotTab$MMB[x]<-MMB[[x]]
+   PlotTab$B35[x]<-B35[[x]]
+   PlotTab$F35[x]<-F35[[x]]
+   PlotTab$FOFL[x]<-FOFL[[x]]
+   PlotTab$OFL[x]<-OFL[[x]]
+   PlotTab$Status[x]<-Status[[x]]
+}
+
+rownames(PlotTab)<- NULL
+PlotTab[,c(2:6)]<-round(PlotTab[,c(2:6)],2)
+kable(PlotTab[,1:6],split.cells=c(25,rep(7,5)),justify=c("left",rep("center",5)),caption="\\label{stepchange}Changes in management quantities for each scenario considered. Reported management quantities are derived from maximum likelihood estimates.")
+
+
+```
+
+\newpage
+

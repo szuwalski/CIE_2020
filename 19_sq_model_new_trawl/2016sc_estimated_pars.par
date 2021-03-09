@@ -1,0 +1,163 @@
+# Number of parameters = 361 Objective function value = 7512.48  Maximum gradient component = 0.00964605
+# af:
+1
+# am:
+1
+# bf:
+1
+# bm:
+1
+# bf1:
+1
+# deltaf:
+1
+# st_gr:
+0
+# growth_beta:
+0
+# matest50f:
+0
+# matestslpf:
+0
+# matest50m:
+0
+# matestslpm:
+0
+# mateste:
+1
+# matestfe:
+1
+# moltp_af:
+0
+# moltp_bf:
+0
+# moltp_am:
+0
+# moltp_bm:
+0
+# moltp_ammat:
+0
+# moltp_bmmat:
+0
+# mean_log_rec_f:
+1
+# mean_log_rec_m:
+1
+# rec_devf:
+1
+# rec_devm:
+1
+# alpha1_rec:
+0
+# beta_rec:
+0
+# mnatlen_styr:
+1
+1
+# fnatlen_styr:
+1
+1
+# log_avg_fmort:
+1
+# fmort_dev:
+1
+# log_avg_fmortdf:
+1
+# fmortdf_dev:
+1
+# log_avg_fmortt:
+1
+# fmortt_dev_era1:
+1
+# fmortt_dev_era2:
+1
+# discard_mult:
+0
+# Fem_F_prop_constant:
+0
+# log_avg_sel50_mn:
+1
+# log_sel50_dev_mn:
+0
+# log_avg_sel50_mo:
+0
+# log_sel50_dev_mo:
+0
+# fish_slope_mn:
+1
+# fish_slope_mo:
+0
+# fish_fit_slope_mn:
+1
+# fish_fit_sel50_mn:
+1
+# fish_fit_slope_mo:
+0
+# fish_fit_sel50_mo:
+0
+# fish_slope_mo2:
+0
+# fish_sel50_mo2:
+0
+# fish_slope_mn2:
+0
+# fish_sel50_mn2:
+0
+# fish_disc_slope_f:
+1
+# fish_disc_sel50_f:
+1
+# log_dev_50f:
+0
+# fish_disc_slope_tf:
+1
+# fish_disc_sel50_tf:
+1
+# srv2_q:
+1
+# srv2_q_f:
+1
+# srv2_sel95:
+1
+# srv2_sel50:
+1
+# srv3_q:
+1
+# srv3_sel95:
+1
+# srv3_sel50:
+1
+# srv3_q_f:
+1
+# srv3_sel95_f:
+1
+# srv3_sel50_f:
+1
+# srvind_q_f:
+1
+# srvind_sel95_f:
+1
+# srvind_sel50_f:
+1
+# srv10ind_q:
+1
+# srv10ind_q_f:
+1
+# srv10ind_sel95_f:
+0
+# srv10ind_sel50_f:
+0
+# selsmo10ind:
+1
+# selsmo09ind:
+1
+# Mmult_imat:
+1
+# Mmult:
+1
+# Mmultf:
+1
+# cpueq:
+1
+# proprecn:
+0
